@@ -13,7 +13,7 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
 
-    from app.routes import api_bp
-    app.register_blueprint(api_bp)
+    from app.routes import register_routes
+    register_routes(app)
 
     return app
