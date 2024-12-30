@@ -7,3 +7,10 @@ class Card(db.Model):
     deck_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
+
+class DrawnCard(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    deck_id = db.Column(db.Integer, db.ForeignKey('deck.id'), nullable=False)
+    card_id = db.Column(db.Integer, db.ForeignKey('card.id'), nullable=False)
+    is_drawn = db.Column(db.Boolean, default=False, nullable=False)
+

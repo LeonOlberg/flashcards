@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
-from app.models import db, Card
+from sqlalchemy.sql.expression import func
+from app.models import db, Card, Deck
 
 card_bp = Blueprint('cards', __name__, url_prefix='/cards')
 
@@ -82,3 +83,21 @@ def delete_card(card_id):
     db.session.commit()
 
     return jsonify({"message": "Card deleted successfully"}), 200
+
+@card_bp.route('/random/<int:deck_id>', methods=['GET'])
+def get_random_card(deck_id):
+    deck = Deck.query.get(deck_id)
+    if not deck:
+        return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
+
+    random_card = Card.query.filter_by(deck_id=deck_id).order_by(func.random()).first()
+
+    if not random_card:
+        return jsonify({"error": f"No cards available in deck with id {deck_id}"}), 404
+
+    return jsonify({
+    "id": random_card.id,
+    "front": random_card.front,
+    "back": random_card.back,
+    "deck_id": random_card.deck_id
+})
