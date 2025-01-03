@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from sqlalchemy.sql.expression import func
-from app.models import db, Card, Deck
+from app.models import db, Card, Deck, DrawnCard
 
 card_bp = Blueprint('cards', __name__, url_prefix='/cards')
 
@@ -90,14 +90,26 @@ def get_random_card(deck_id):
     if not deck:
         return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
 
-    random_card = Card.query.filter_by(deck_id=deck_id).order_by(func.random()).first()
+    import ipdb; ipdb.set_trace()
 
+    undrawn_cards = db.session.query(Card).join(DrawnCard, Card.id == DrawnCard.card_id).filter(Card.deck_id == deck_id, DrawnCard.is_drawn == False).all()
+
+    if not undrawn_cards:
+        db.session.query(DrawnCard).filter_by(deck_id=deck_id).update({"is_drawn": False})
+        db.session.commit()
+        undrawn_cards = db.session.query(Card).join(DrawnCard, Card.id == DrawnCard.card_id).filter(Card.deck_id == deck_id, DrawnCard.is_drawn == False).all()
+
+
+    random_card = undrawn_cards[func.random() * len(undrawn_cards) % len(undrawn_cards)]
     if not random_card:
         return jsonify({"error": f"No cards available in deck with id {deck_id}"}), 404
 
+    db.session.query(DrawnCard).filter_by(deck_id=deck_id, card_id=random_card.id).update({"is_drawn": True})
+    db.session.commit()
+
     return jsonify({
-    "id": random_card.id,
-    "front": random_card.front,
-    "back": random_card.back,
-    "deck_id": random_card.deck_id
-})
+        "id": random_card.id,
+        "front": random_card.front,
+        "back": random_card.back,
+        "deck_id": random_card.deck_id
+    })
