@@ -90,17 +90,13 @@ def get_random_card(deck_id):
     if not deck:
         return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
 
-    import ipdb; ipdb.set_trace()
-
     undrawn_cards = db.session.query(Card).join(DrawnCard, Card.id == DrawnCard.card_id).filter(Card.deck_id == deck_id, DrawnCard.is_drawn == False).all()
 
     if not undrawn_cards:
-        db.session.query(DrawnCard).filter_by(deck_id=deck_id).update({"is_drawn": False})
-        db.session.commit()
-        undrawn_cards = db.session.query(Card).join(DrawnCard, Card.id == DrawnCard.card_id).filter(Card.deck_id == deck_id, DrawnCard.is_drawn == False).all()
-
+        return jsonify({"error": f"There are no more cards to be drawn in the Deck: {deck.title}"}), 404
 
     random_card = undrawn_cards[func.random() * len(undrawn_cards) % len(undrawn_cards)]
+
     if not random_card:
         return jsonify({"error": f"No cards available in deck with id {deck_id}"}), 404
 
@@ -113,3 +109,14 @@ def get_random_card(deck_id):
         "back": random_card.back,
         "deck_id": random_card.deck_id
     })
+
+@card_bp.route('/reset/<int:deck_id>', methods=['PUT'])
+def get_random_card(deck_id):
+    deck = Deck.query.get(deck_id)
+    if not deck:
+        return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
+
+    db.session.query(DrawnCard).filter_by(deck_id=deck_id).update({"is_drawn": False})
+    db.session.commit()
+
+    return jsonify({f"The Deck with id {deck_id} is resetd"}), 201
