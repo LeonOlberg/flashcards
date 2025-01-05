@@ -111,7 +111,7 @@ def get_random_card(deck_id):
     })
 
 @card_bp.route('/reset/<int:deck_id>', methods=['PUT'])
-def get_random_card(deck_id):
+def reset_drawn_cards(deck_id):
     deck = Deck.query.get(deck_id)
     if not deck:
         return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
