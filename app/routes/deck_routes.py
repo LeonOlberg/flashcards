@@ -15,7 +15,7 @@ def get_decks():
         "updated_at": deck.updated_at
     } for deck in decks])
 
-@deck_bp.route('/<int:deck_id>', methods=['GET'])
+@deck_bp.route('/<string:deck_id>', methods=['GET'])
 def get_deck(deck_id):
     deck = Deck.query.get_or_404(deck_id)
     return jsonify({
@@ -48,7 +48,7 @@ def create_deck():
         "updated_at": new_deck.updated_at
     }), 201
 
-@deck_bp.route('/<int:deck_id>', methods=['PATCH'])
+@deck_bp.route('/<string:deck_id>', methods=['PATCH'])
 def update_deck(deck_id):
     deck = Deck.query.get_or_404(deck_id)
     data = request.get_json()
@@ -74,7 +74,7 @@ def update_deck(deck_id):
         "category": deck.category.value
     })
 
-@deck_bp.route('/<int:deck_id>', methods=['DELETE'])
+@deck_bp.route('/<string:deck_id>', methods=['DELETE'])
 def delete_deck(deck_id):
     deck = Deck.query.get_or_404(deck_id)
     db.session.delete(deck)

@@ -17,7 +17,7 @@ def get_cards():
         "updated_at": card.updated_at
     } for card in cards])
 
-@card_bp.route('/<int:card_id>', methods=['GET'])
+@card_bp.route('/<string:card_id>', methods=['GET'])
 def get_card(card_id):
     card = Card.query.get_or_404(card_id)
 
@@ -45,7 +45,7 @@ def create_card():
         "updated_at": new_card.updated_at
     }), 201
 
-@card_bp.route('/<int:card_id>', methods=['PATCH'])
+@card_bp.route('/<string:card_id>', methods=['PATCH'])
 def update_card(card_id):
     card = Card.query.get_or_404(card_id)
     data = request.get_json()
@@ -76,7 +76,7 @@ def update_card(card_id):
         "updated_at": card.updated_at
     })
 
-@card_bp.route('/<int:card_id>', methods=['DELETE'])
+@card_bp.route('/<string:card_id>', methods=['DELETE'])
 def delete_card(card_id):
     card = Card.query.get_or_404(card_id)
     db.session.delete(card)
@@ -84,7 +84,7 @@ def delete_card(card_id):
 
     return jsonify({"message": "Card deleted successfully"}), 200
 
-@card_bp.route('/random/<int:deck_id>', methods=['GET'])
+@card_bp.route('/random/<string:deck_id>', methods=['GET'])
 def get_random_card(deck_id):
     deck = Deck.query.get(deck_id)
     if not deck:
@@ -110,7 +110,7 @@ def get_random_card(deck_id):
         "deck_id": random_card.deck_id
     })
 
-@card_bp.route('/reset/<int:deck_id>', methods=['PUT'])
+@card_bp.route('/reset/<string:deck_id>', methods=['PUT'])
 def reset_drawn_cards(deck_id):
     deck = Deck.query.get(deck_id)
     if not deck:

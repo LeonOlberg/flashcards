@@ -1,6 +1,8 @@
 from app import db
 import enum
 from sqlalchemy.types import Enum
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 class DeckCategory(enum.Enum):
     ALGORITHMS = "algorithms"
@@ -9,7 +11,7 @@ class DeckCategory(enum.Enum):
     SYSTEM_DESIGN = "system design"
 
 class Deck(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = db.Column(db.String(100), nullable=False)
     category = db.Column(Enum(DeckCategory, native_enum=False), nullable=False)
     card = db.relationship('Card', backref='deck', lazy=True)
