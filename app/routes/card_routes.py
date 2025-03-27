@@ -12,6 +12,8 @@ def get_cards():
         "id": card.id,
         "front": card.front,
         "back": card.back,
+        "front_img": card.front_img,
+        "back_img": card.back_img,
         "deck_id": card.deck_id,
         "created_at": card.created_at,
         "updated_at": card.updated_at
@@ -25,6 +27,8 @@ def get_card(card_id):
         "id": card.id,
         "front": card.front,
         "back": card.back,
+        "front_img": card.front_img,
+        "back_img": card.back_img,
         "deck_id": card.deck_id,
         "created_at": card.created_at,
         "updated_at": card.updated_at
@@ -33,7 +37,16 @@ def get_card(card_id):
 @card_bp.route('', methods=['POST'])
 def create_card():
     data = request.get_json()
-    new_card = Card(front=data['front'], back=data['back'])
+    new_card = Card(
+        front=data['front'],
+        back=data['back'],
+        front_img=data.get('front_img'),
+        back_img=data.get('back_img')
+    )
+
+    if 'deck_id' in data and data['deck_id']:
+        new_card.deck_id = data['deck_id']
+
     db.session.add(new_card)
     db.session.commit()
 
@@ -41,6 +54,8 @@ def create_card():
         "id": new_card.id,
         "front": new_card.front,
         "back": new_card.back,
+        "front_img": new_card.front_img,
+        "back_img": new_card.back_img,
         "created_at": new_card.created_at,
         "updated_at": new_card.updated_at
     }), 201
@@ -50,7 +65,7 @@ def update_card(card_id):
     card = Card.query.get_or_404(card_id)
     data = request.get_json()
 
-    allowed_fields = {'front', 'back', 'deck_id'}
+    allowed_fields = {'front', 'back', 'front_img', 'back_img', 'deck_id'}
     for field in allowed_fields:
         if field in data:
             if field == 'deck_id':
@@ -71,6 +86,8 @@ def update_card(card_id):
         "id": card.id,
         "front": card.front,
         "back": card.back,
+        "front_img": card.front_img,
+        "back_img": card.back_img,
         "deck_id": card.deck_id,
         "created_at": card.created_at,
         "updated_at": card.updated_at
@@ -90,23 +107,45 @@ def get_random_card(deck_id):
     if not deck:
         return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
 
-    undrawn_cards = db.session.query(Card).join(DrawnCard, Card.id == DrawnCard.card_id).filter(Card.deck_id == deck_id, DrawnCard.is_drawn == False).all()
+    # Get cards in the deck
+    cards_in_deck = Card.query.filter_by(deck_id=deck_id).all()
+
+    if not cards_in_deck:
+        return jsonify({"error": f"No cards available in deck with id {deck_id}"}), 404
+
+    # Check if we have drawn card records for this deck
+    drawn_card_ids = db.session.query(DrawnCard.card_id).filter(
+        DrawnCard.card_id.in_([card.id for card in cards_in_deck]),
+        DrawnCard.is_drawn == True
+    ).all()
+    drawn_card_ids = [str(card_id[0]) for card_id in drawn_card_ids]
+
+    # Filter cards that haven't been drawn yet
+    undrawn_cards = [card for card in cards_in_deck if str(card.id) not in drawn_card_ids]
 
     if not undrawn_cards:
         return jsonify({"error": f"There are no more cards to be drawn in the Deck: {deck.title}"}), 404
 
-    random_card = undrawn_cards[func.random() * len(undrawn_cards) % len(undrawn_cards)]
+    # Get a random card from undrawn cards
+    import random
+    random_card = random.choice(undrawn_cards)
 
-    if not random_card:
-        return jsonify({"error": f"No cards available in deck with id {deck_id}"}), 404
+    # Mark card as drawn
+    drawn_card = DrawnCard.query.filter_by(card_id=random_card.id).first()
+    if drawn_card:
+        drawn_card.is_drawn = True
+    else:
+        drawn_card = DrawnCard(card_id=random_card.id, is_drawn=True)
+        db.session.add(drawn_card)
 
-    db.session.query(DrawnCard).filter_by(deck_id=deck_id, card_id=random_card.id).update({"is_drawn": True})
     db.session.commit()
 
     return jsonify({
         "id": random_card.id,
         "front": random_card.front,
         "back": random_card.back,
+        "front_img": random_card.front_img,
+        "back_img": random_card.back_img,
         "deck_id": random_card.deck_id
     })
 
@@ -116,7 +155,18 @@ def reset_drawn_cards(deck_id):
     if not deck:
         return jsonify({"error": f"Deck with id {deck_id} does not exist"}), 404
 
-    db.session.query(DrawnCard).filter_by(deck_id=deck_id).update({"is_drawn": False})
+    # Get all cards in the deck
+    cards_in_deck = Card.query.filter_by(deck_id=deck_id).all()
+
+    # Reset all drawn cards for this deck
+    for card in cards_in_deck:
+        drawn_card = DrawnCard.query.filter_by(card_id=card.id).first()
+        if drawn_card:
+            drawn_card.is_drawn = False
+        else:
+            drawn_card = DrawnCard(card_id=card.id, is_drawn=False)
+            db.session.add(drawn_card)
+
     db.session.commit()
 
-    return jsonify({f"The Deck with id {deck_id} is resetd"}), 201
+    return jsonify({"message": f"The Deck with id {deck_id} has been reset"}), 200
