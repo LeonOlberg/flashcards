@@ -1,47 +1,43 @@
 from flask import Blueprint, request, jsonify
 from sqlalchemy.sql.expression import func
 from app.models import db, Card, Deck, DrawnCard
+from app.storage import storage_service
+from werkzeug.utils import secure_filename
 
 card_bp = Blueprint('cards', __name__, url_prefix='/cards')
+
+def _get_card_response(card):
+    """Helper function to format card response with presigned URLs."""
+    return {
+        "id": card.id,
+        "front": card.front,
+        "back": card.back,
+        "front_img": storage_service.get_file_url(card.front_img) if card.front_img else None,
+        "back_img": storage_service.get_file_url(card.back_img) if card.back_img else None,
+        "deck_id": card.deck_id,
+        "created_at": card.created_at,
+        "updated_at": card.updated_at
+    }
 
 @card_bp.route('', methods=['GET'])
 def get_cards():
     cards = Card.query.all()
-
-    return jsonify([{
-        "id": card.id,
-        "front": card.front,
-        "back": card.back,
-        "front_img": card.front_img,
-        "back_img": card.back_img,
-        "deck_id": card.deck_id,
-        "created_at": card.created_at,
-        "updated_at": card.updated_at
-    } for card in cards])
+    return jsonify([_get_card_response(card) for card in cards])
 
 @card_bp.route('/<string:card_id>', methods=['GET'])
 def get_card(card_id):
     card = Card.query.get_or_404(card_id)
-
-    return jsonify({
-        "id": card.id,
-        "front": card.front,
-        "back": card.back,
-        "front_img": card.front_img,
-        "back_img": card.back_img,
-        "deck_id": card.deck_id,
-        "created_at": card.created_at,
-        "updated_at": card.updated_at
-    })
+    return jsonify(_get_card_response(card))
 
 @card_bp.route('', methods=['POST'])
 def create_card():
-    data = request.get_json()
+    data = request.form.to_dict()
+    front_img = request.files.get('front_img')
+    back_img = request.files.get('back_img')
+
     new_card = Card(
         front=data['front'],
-        back=data['back'],
-        front_img=data.get('front_img'),
-        back_img=data.get('back_img')
+        back=data['back']
     )
 
     if 'deck_id' in data and data['deck_id']:
@@ -50,22 +46,24 @@ def create_card():
     db.session.add(new_card)
     db.session.commit()
 
-    return jsonify({
-        "id": new_card.id,
-        "front": new_card.front,
-        "back": new_card.back,
-        "front_img": new_card.front_img,
-        "back_img": new_card.back_img,
-        "created_at": new_card.created_at,
-        "updated_at": new_card.updated_at
-    }), 201
+    # Upload images if provided
+    if front_img:
+        new_card.front_img = storage_service.upload_file(front_img, new_card.id, 'front')
+    if back_img:
+        new_card.back_img = storage_service.upload_file(back_img, new_card.id, 'back')
+
+    db.session.commit()
+
+    return jsonify(_get_card_response(new_card)), 201
 
 @card_bp.route('/<string:card_id>', methods=['PATCH'])
 def update_card(card_id):
     card = Card.query.get_or_404(card_id)
-    data = request.get_json()
+    data = request.form.to_dict()
+    front_img = request.files.get('front_img')
+    back_img = request.files.get('back_img')
 
-    allowed_fields = {'front', 'back', 'front_img', 'back_img', 'deck_id'}
+    allowed_fields = {'front', 'back', 'deck_id'}
     for field in allowed_fields:
         if field in data:
             if field == 'deck_id':
@@ -79,19 +77,15 @@ def update_card(card_id):
             else:
                 setattr(card, field, data[field])
 
+    # Handle image uploads
+    if front_img:
+        card.front_img = storage_service.upload_file(front_img, card.id, 'front')
+    if back_img:
+        card.back_img = storage_service.upload_file(back_img, card.id, 'back')
+
     db.session.commit()
 
-
-    return jsonify({
-        "id": card.id,
-        "front": card.front,
-        "back": card.back,
-        "front_img": card.front_img,
-        "back_img": card.back_img,
-        "deck_id": card.deck_id,
-        "created_at": card.created_at,
-        "updated_at": card.updated_at
-    })
+    return jsonify(_get_card_response(card))
 
 @card_bp.route('/<string:card_id>', methods=['DELETE'])
 def delete_card(card_id):
@@ -140,14 +134,7 @@ def get_random_card(deck_id):
 
     db.session.commit()
 
-    return jsonify({
-        "id": random_card.id,
-        "front": random_card.front,
-        "back": random_card.back,
-        "front_img": random_card.front_img,
-        "back_img": random_card.back_img,
-        "deck_id": random_card.deck_id
-    })
+    return jsonify(_get_card_response(random_card))
 
 @card_bp.route('/reset/<string:deck_id>', methods=['PUT'])
 def reset_drawn_cards(deck_id):
