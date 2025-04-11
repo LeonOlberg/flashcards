@@ -3,6 +3,9 @@ from sqlalchemy.sql.expression import func
 from app.models import db, Card, Deck, DrawnCard
 from app.storage import storage_service
 from werkzeug.utils import secure_filename
+import csv
+import io
+from uuid import UUID
 
 card_bp = Blueprint('cards', __name__, url_prefix='/cards')
 
@@ -157,3 +160,86 @@ def reset_drawn_cards(deck_id):
     db.session.commit()
 
     return jsonify({"message": f"The Deck with id {deck_id} has been reset"}), 200
+
+@card_bp.route('/import', methods=['POST'])
+def create_cards_from_csv():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({"error": "File must be a CSV"}), 400
+
+    # Read the CSV file
+    try:
+        csv_data = file.read().decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(csv_data))
+
+        # Validate CSV structure (checking if the header contains the required fields)
+        required_fields = {'front', 'back'}
+        if not all(field in csv_reader.fieldnames for field in required_fields):
+            return jsonify({"error": "CSV must contain 'front' and 'back' columns"}), 400
+
+        # Process each row
+        card_data = []
+        errors = []
+        for i, row in enumerate(csv_reader, start=2):  # start=2 because CSV rows are 1-indexed and we skip header
+            try:
+                # Validate required fields
+                if not row.get('front') or not row.get('back'):
+                    errors.append(f"Row {i}: Missing required fields")
+                    continue
+
+                # Validate deck_id if provided
+                deck_id = None
+                if 'deck_id' in row and row['deck_id']:
+                    try:
+                        deck_id = UUID(row['deck_id'])
+                        # Verify deck exists
+                        if not Deck.query.get(deck_id):
+                            errors.append(f"Row {i}: Deck with id {deck_id} does not exist")
+                            continue
+                    except ValueError:
+                        errors.append(f"Row {i}: Invalid deck_id format")
+                        continue
+
+                # Prepare card data for bulk insert
+                card_data.append({
+                    'front': row['front'],
+                    'back': row['back'],
+                    'deck_id': deck_id
+                })
+
+            except Exception as e:
+                errors.append(f"Row {i}: {str(e)}")
+
+        # If there are any errors, don't create any cards
+        if errors:
+            return jsonify({
+                "error": "Some rows had errors",
+                "details": errors
+            }), 400
+
+        # If all validations passed, create all cards in a single batch
+        if card_data:
+            # Use bulk insert to create all cards at once
+            result = db.session.execute(
+                Card.__table__.insert(),
+                card_data
+            )
+            db.session.commit()
+
+            # Fetch the created cards to return in response
+            created_cards = Card.query.filter(
+                Card.id.in_(result.inserted_primary_key_rows)
+            ).all()
+
+            return jsonify({
+                "message": f"Successfully created {len(created_cards)} cards",
+                "cards": [_get_card_response(card) for card in created_cards]
+            }), 201
+        else:
+            return jsonify({"message": "No cards to create"}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Error processing CSV file: {str(e)}"}), 400
